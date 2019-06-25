@@ -219,6 +219,7 @@ impl Interpreter {
                 }
                 _ => {
                     if wait > 0 {
+                        self.inner.write_array(6);
                         thread::sleep(Duration::from_millis(wait));
                     }
                 }
