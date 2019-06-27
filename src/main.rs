@@ -37,7 +37,7 @@ enum Action {
     JumpForward,
     JumpBack,
     Exit(String),
-    None
+    None,
 }
 
 #[derive(Debug)]
@@ -54,22 +54,21 @@ impl Default for BfArray {
 
 impl BfArray {
     pub fn new() -> Self {
-        let mut raw = Vec::with_capacity(ARRAY_SIZE);
-        raw.resize(ARRAY_SIZE, 0);
+        let raw = vec![0; ARRAY_SIZE];
         Self {
             raw,
-            pointer: Default::default()
+            pointer: Default::default(),
         }
     }
 
     pub fn write_array(&self, to_cell: usize) {
         let mut file = File::create("visualizer").unwrap();
-        
+
         for i in 0..=to_cell {
             write!(file, "{:>4}", i).unwrap();
         }
         writeln!(file).unwrap();
-        
+
         for i in 0..=to_cell {
             write!(file, "{:>4}", self.raw[i]).unwrap();
         }
@@ -79,11 +78,11 @@ impl BfArray {
     }
 
     pub fn perform_operation<W: Write>(&mut self, opcode: &OpCode, writer: &mut W) -> Action {
-        use OpCode::*;
         use JumpFrom::*;
         use ModifyDirection::*;
+        use OpCode::*;
 
-        let action = match opcode {
+        match opcode {
             Output => self.output(writer),
             Input => self.input(),
             JmpStart => self.jump_from(Start),
@@ -92,9 +91,7 @@ impl BfArray {
             Decrement => self.modify_value(Down),
             MoveForward => self.move_pointer(Up),
             MoveBack => self.move_pointer(Down),
-        };
-
-        action
+        }
     }
 
     #[inline]
@@ -120,7 +117,7 @@ impl BfArray {
                 input = byte.unwrap();
                 break;
             }
-        };
+        }
 
         self.set_value(input);
         Action::None
@@ -131,18 +128,14 @@ impl BfArray {
         match (from, nonzero) {
             (JumpFrom::Start, false) => Action::JumpForward,
             (JumpFrom::End, true) => Action::JumpBack,
-            _ => Action::None
+            _ => Action::None,
         }
     }
 
     fn modify_value(&mut self, direction: ModifyDirection) -> Action {
         let mod_func = match direction {
-            ModifyDirection::Up => {
-                u8::wrapping_add
-            },
-            ModifyDirection::Down => {
-                u8::wrapping_sub
-            },
+            ModifyDirection::Up => u8::wrapping_add,
+            ModifyDirection::Down => u8::wrapping_sub,
         };
 
         self.set_value(mod_func(self.value(), 1));
@@ -151,12 +144,8 @@ impl BfArray {
 
     fn move_pointer(&mut self, direction: ModifyDirection) -> Action {
         let mod_func = match direction {
-            ModifyDirection::Up => {
-                usize::checked_add
-            },
-            ModifyDirection::Down => {
-                usize::checked_sub
-            },
+            ModifyDirection::Up => usize::checked_add,
+            ModifyDirection::Down => usize::checked_sub,
         };
 
         match mod_func(self.pointer, 1) {
@@ -189,7 +178,9 @@ impl Interpreter {
 
     pub fn execute_all<W: Write>(&mut self, writer: &mut W) {
         self.pointer = 0;
-        let wait = std::env::var("BF_VISUALIZER_TIME").map(|s| s.parse().unwrap_or(0)).unwrap_or(0);
+        let wait = std::env::var("BF_VISUALIZER_TIME")
+            .map(|s| s.parse().unwrap_or(0))
+            .unwrap_or(0);
 
         while let Some(op) = self.ops.get(self.pointer) {
             match self.inner.perform_operation(op, writer) {
@@ -197,11 +188,11 @@ impl Interpreter {
                 Action::Exit(s) => {
                     eprintln!("{}", s);
                     break;
-                },
+                }
                 Action::JumpForward => {
                     self.jmp_forward();
                     continue;
-                },
+                }
                 Action::JumpBack => {
                     self.pointer = *self.jump_stack.last().unwrap();
                     continue;
@@ -232,8 +223,10 @@ impl Interpreter {
     #[inline]
     fn increment_pointer(&mut self) {
         match self.pointer.checked_add(1) {
-            Some(x) => {self.pointer = x;}
-            None => panic!("Iter pointer overflow")
+            Some(x) => {
+                self.pointer = x;
+            }
+            None => panic!("Iter pointer overflow"),
         }
     }
 
@@ -241,7 +234,7 @@ impl Interpreter {
         let mut jmp_stack = 0usize;
         loop {
             self.increment_pointer();
-            let op = &self.ops[self.pointer];  // parser rejects unmatched skips
+            let op = &self.ops[self.pointer]; // parser rejects unmatched skips
             match op {
                 OpCode::JmpStart => {
                     jmp_stack += 1;
@@ -255,8 +248,8 @@ impl Interpreter {
                 }
                 _ => {}
             }
-        };
-        self.increment_pointer();  // Skip the JmpEnd that we just landed on.
+        }
+        self.increment_pointer(); // Skip the JmpEnd that we just landed on.
     }
 }
 
@@ -270,7 +263,7 @@ fn parse_from<R: Read>(reader: R) -> Result<Vec<OpCode>, String> {
     parse(reader.bytes().map(|r| r.unwrap()))
 }
 
-fn parse(buf: impl IntoIterator<Item=u8>) -> Result<Vec<OpCode>, String> {
+fn parse(buf: impl IntoIterator<Item = u8>) -> Result<Vec<OpCode>, String> {
     let mut ops = Vec::new();
     let mut open = 0usize;
 
@@ -295,10 +288,12 @@ fn parse(buf: impl IntoIterator<Item=u8>) -> Result<Vec<OpCode>, String> {
                 open -= 1;
                 JmpEnd
             }
-            _ => {continue;}
+            _ => {
+                continue;
+            }
         };
         ops.push(opcode);
-    };
+    }
 
     if open != 0 {
         Err("Unmatched '['".into())
@@ -313,17 +308,26 @@ fn run_file<P: AsRef<Path>, W: Write>(path: P, writer: &mut W) {
     interp.execute_all(writer);
 }
 
-fn main() {
-    run_file("hello-world.bf", &mut stdout().lock());
+fn usage() {
+    eprintln!("USAGE: bf FILE...")
 }
 
-#[cfg(test)]
-mod test {
-    // use super::*;
+fn main() {
+    let mut args = std::env::args_os();
+    if args.len() < 2 {
+        eprintln!("No file to execute.");
+        usage();
+        std::process::exit(1);
+    };
 
-    #[test]
-    fn test_hello_world() {
-        // let mut writer = Vec::new();
+    for arg in args.by_ref() {
+        if arg == "-h" || arg == "--help" {
+            usage();
+            std::process::exit(0);
+        }
+    }
 
+    for arg in args.skip(1) {
+        run_file(arg, &mut stdout().lock());
     }
 }
